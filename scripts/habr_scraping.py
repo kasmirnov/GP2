@@ -62,7 +62,7 @@ def parse_each_vacancy_from_list(vacancies_urls, page, driver):
 
 
 def make_driver():
-    logger.info("making driver...")
+    logger.info("creating driver...")
     opts = Options()
     opts.page_load_strategy = "eager"
     opts.add_argument("--window-size=1920,1200")

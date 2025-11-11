@@ -1,90 +1,119 @@
 from selectolax.parser import HTMLParser
 import json
+from pathlib import Path
+import pandas as pd
 
 
-with open("vacancies1.ndjson") as f:
-    for line in f:
-        record = json.loads(line)
+BASE_DIR = Path(__file__).resolve().parents[1]
+READ_PATH = BASE_DIR / "data" / "raw" / "habr.jsonl"
+OUTPUT_PATH = BASE_DIR / "data" / "clean" / "habr_clean.jsonl"
+READ_CLEAN_PATH = BASE_DIR / "data" / "clean" / "habr_clean.jsonl"
+OUTPUT_CSV_PATH = BASE_DIR / "data" / "clean" / "habr.csv"
 
-        header_html = record["blocks"]["header_html"]
-        tree = HTMLParser(header_html)
+def get_salary(tree):
+    salary = tree.css_first(".basic-salary.basic-salary--appearance-vacancy-header")
+    if salary:
+        salary = salary.text()
+    return salary
 
-        title = tree.css_first("h1").text()
+def get_skills_and_levels(tree):
+    req_block = None
 
-        salary = tree.css_first(".basic-salary.basic-salary--appearance-vacancy-header")
-        if salary:
-            salary = salary.text()
+    for sec in tree.css("div.content-section"):
+        title_node = sec.css_first("h2.content-section__title")
+        if title_node and title_node.text(strip=True) == "Требования":
+            req_block = sec
+            break
 
-        req_block = None
+    skills = []
+    levels = []
+    raw = None
 
-        for sec in tree.css("div.content-section"):
-            title_node = sec.css_first("h2.content-section__title")
-            if title_node and title_node.text(strip=True) == "Требования":
-                req_block = sec
-                break
+    if req_block:
+        raw = req_block.css_first(".inline-list")
 
-        skills = []
-        levels=[]
+    for a in raw.css("a"):
+        href = a.attributes.get('href', '')
+        text = a.text(strip=True)
+        if 'skills' in href:
+            skills.append(text)
+        else:
+            levels.append(text)
 
-        if req_block:
-            raw = req_block.css_first(".inline-list")
-
-        for a in raw.css("a"):
-            href = a.attributes.get('href', '')
-            text = a.text(strip=True)
-            if 'skills' in href:
-                skills.append(text)
-            else:
-                levels.append(text)
-
-        # if req_block:
-        #     raw = req_block.css_first(".inline-list").text(separator=" ", strip=True)
-        #     requirements = [s.strip() for s in raw.split("•")]
-        #
-        # if ',' in requirements[0]:
-        #     levels = [s.strip() for s in requirements[0].split(',')]
-        #     skills = requirements[1:]
-        # else:
-        #     skills = requirements
-
-        geo_block = None
-
-        for sec in tree.css("div.content-section"):
-            title_node = sec.css_first("h2.content-section__title")
-            if title_node and title_node.text(strip=True) == "Местоположение и тип занятости":
-                geo_block = sec
-                break
-
-        geo = set()
-
-        if geo_block:
-            raw_geo = geo_block.css_first(".inline-list")
-
-        for a in raw_geo.css("a"):
-            geo.add(a.text())
-        geo = list(geo)
-
-        working_requirements = [x.strip() for x in raw_geo.text().split("•") if x.strip()]
-
-        if geo:
-            working_requirements = working_requirements[1:]
+    return skills, levels
 
 
-        company_html = HTMLParser(record["blocks"]["company_html"])
-        company_name = company_html.css_first(".company_name")
-        if company_name:
-            company_name = company_name.text()
+def get_geo_and_working_requirements(tree):
+    geo_block = None
 
-        dict = {
-            "vacancy_name": title,
-            "company_name": company_name,
-            "salary": salary,
-            "levels": levels,
-            "skills": skills,
-            "geo": geo,
-            "working_requirements": working_requirements,
-        }
+    for sec in tree.css("div.content-section"):
+        title_node = sec.css_first("h2.content-section__title")
+        if title_node and title_node.text(strip=True) == "Местоположение и тип занятости":
+            geo_block = sec
+            break
 
-        with open("parsed.ndjson", "a") as file:
-            json_line = json.dumps(dict, ensure_ascii=False)
-            file.write(json_line + '\n')
+    geo = set()
+    raw_geo = None
+
+    if geo_block:
+        raw_geo = geo_block.css_first(".inline-list")
+
+    for a in raw_geo.css("a"):
+        geo.add(a.text())
+    geo = list(geo)
+
+    working_requirements = [x.strip() for x in raw_geo.text().split("•") if x.strip()]
+
+    if geo:
+        working_requirements = working_requirements[1:]
+
+    return geo, working_requirements
+
+def get_company_name(record):
+    company_html = HTMLParser(record["blocks"]["company_html"])
+    company_name = company_html.css_first(".company_name")
+    if company_name:
+        company_name = company_name.text()
+
+    return company_name
+
+def make_csv():
+    df = pd.read_json(READ_CLEAN_PATH, lines=True)
+    df.to_csv(OUTPUT_CSV_PATH, index=False)
+
+def main():
+    with open(READ_PATH, "r", encoding="utf-8") as f:
+        for line in f:
+            record = json.loads(line)
+
+            header_html = record["blocks"]["header_html"]
+            tree = HTMLParser(header_html)
+
+            title = tree.css_first("h1").text()
+
+            salary = get_salary(tree)
+
+            skills, levels = get_skills_and_levels(tree)
+
+            geo, working_requirements = get_geo_and_working_requirements(tree)
+
+            company_name = get_company_name(record)
+
+            vacancy_dict = {
+                "vacancy_name": title,
+                "company_name": company_name,
+                "salary": salary,
+                "levels": levels,
+                "skills": skills,
+                "geo": geo,
+                "working_requirements": working_requirements,
+            }
+
+            with open(OUTPUT_PATH, "a", encoding="utf-8") as file:
+                json_line = json.dumps(vacancy_dict, ensure_ascii=False)
+                file.write(json_line + '\n')
+
+            make_csv()
+
+if __name__ == "__main__":
+    main()
