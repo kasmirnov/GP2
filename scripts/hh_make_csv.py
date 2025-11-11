@@ -4,6 +4,7 @@ import logging.config
 import logging.handlers
 from pathlib import Path
 
+
 BASE_DIR = Path(__file__).resolve().parents[1]
 CONFIG_PATH = BASE_DIR / "configs" / "config.json"
 INPUT_PATH = BASE_DIR / "data" / "raw" / "hh.jsonl"
