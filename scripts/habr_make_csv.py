@@ -2,19 +2,34 @@ from selectolax.parser import HTMLParser
 import json
 from pathlib import Path
 import pandas as pd
+import logging.config
+import logging.handlers
 
+logger = logging.getLogger("my_app")
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 READ_PATH = BASE_DIR / "data" / "raw" / "habr.jsonl"
 OUTPUT_PATH = BASE_DIR / "data" / "clean" / "habr_clean.jsonl"
 READ_CLEAN_PATH = BASE_DIR / "data" / "clean" / "habr_clean.jsonl"
 OUTPUT_CSV_PATH = BASE_DIR / "data" / "clean" / "habr.csv"
+CONFIG_PATH = BASE_DIR / "configs" / "config.json"
+
+
+def setup_logging():
+    with open(CONFIG_PATH, "r") as f:
+        config = json.load(f)
+    if not config.get("enabled", True):
+        logging.disable(logging.CRITICAL)
+        return
+    logging.config.dictConfig(config)
+
 
 def get_salary(tree):
     salary = tree.css_first(".basic-salary.basic-salary--appearance-vacancy-header")
     if salary:
         salary = salary.text()
     return salary
+
 
 def get_skills_and_levels(tree):
     req_block = None
@@ -69,6 +84,7 @@ def get_geo_and_working_requirements(tree):
 
     return geo, working_requirements
 
+
 def get_company_name(record):
     company_html = HTMLParser(record["blocks"]["company_html"])
     company_name = company_html.css_first(".company_name")
@@ -77,27 +93,48 @@ def get_company_name(record):
 
     return company_name
 
+
+def get_title(tree):
+    title = tree.css_first("h1").text()
+    return title
+
+
 def make_csv():
     df = pd.read_json(READ_CLEAN_PATH, lines=True)
     df.to_csv(OUTPUT_CSV_PATH, index=False)
 
+
 def main():
+    setup_logging()
+    logger.info("starting habr_make_csv")
+
+    vacancy_n = 0
+    is_successfull = True
     with open(READ_PATH, "r", encoding="utf-8") as f:
         for line in f:
-            record = json.loads(line)
+            vacancy_n += 1
+            logger.info(f"parsing vacancy number: {vacancy_n}")
 
-            header_html = record["blocks"]["header_html"]
-            tree = HTMLParser(header_html)
+            try:
+                record = json.loads(line)
+                header_html = record["blocks"]["header_html"]
+                tree = HTMLParser(header_html)
 
-            title = tree.css_first("h1").text()
+                title = get_title(tree)
 
-            salary = get_salary(tree)
+                salary = get_salary(tree)
 
-            skills, levels = get_skills_and_levels(tree)
+                skills, levels = get_skills_and_levels(tree)
 
-            geo, working_requirements = get_geo_and_working_requirements(tree)
+                geo, working_requirements = get_geo_and_working_requirements(tree)
 
-            company_name = get_company_name(record)
+                company_name = get_company_name(record)
+
+            except Exception as e:
+                logger.exception(f"exception: {e}")
+                logger.info("ending program with error")
+                is_successfull = False
+                break
 
             vacancy_dict = {
                 "vacancy_name": title,
@@ -113,7 +150,12 @@ def main():
                 json_line = json.dumps(vacancy_dict, ensure_ascii=False)
                 file.write(json_line + '\n')
 
-            make_csv()
+            logger.info(f"successfully parsed and wrote into file vacancy number: {vacancy_n}")
+
+        logger.info("starting formatting file into .csv")
+        make_csv()
+        logger.info(f"successfully formatted file into .csv, path:{OUTPUT_CSV_PATH}. ending program")
+
 
 if __name__ == "__main__":
     main()
