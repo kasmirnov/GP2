@@ -8,15 +8,15 @@
       "datefmt": "%Y-%m-%dT%H:%M:%S%z"
     },
     "json": {
-      "()": "mylogger.MyJSONFormatter",
+      "()": "lib.mylogger.MyJSONFormatter",
       "fmt_keys": {
         "level": "levelname",
-        "message": "message",
         "timestamp": "timestamp",
-        "logger": "name",
         "module": "module",
+        "message": "message",
         "function": "funcName",
-        "line": "lineno"
+        "line": "lineno",
+        "logger": "name"
       }
     }
   },
@@ -31,18 +31,19 @@
       "class": "logging.handlers.RotatingFileHandler",
       "level": "DEBUG",
       "formatter": "json",
-      "filename": "logs.log",
-      "maxBytes": 10000,
+      "filename": "logs/logs.log",
+      "maxBytes": 10000000000,
       "backupCount": 3
     }
   },
   "loggers": {
-    "root": {
+    "my_app": {
       "level": "DEBUG",
       "handlers": [
         "stderr",
         "file"
-      ]
+      ],
+      "propagate": false
     }
   }
 }

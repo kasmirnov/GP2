@@ -11,3 +11,6 @@ logs/
 
 # jupyter
 .ipynb_checkpoints/
+
+#idea
+.idea/
