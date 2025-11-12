@@ -66,6 +66,7 @@ def make_driver():
     opts = Options()
     opts.page_load_strategy = "eager"
     opts.add_argument("--window-size=1920,1200")
+    opts.add_argument("--disable-blink-features=AutomationControlled")
     opts.add_argument("--headless=new")
     driver = webdriver.Chrome(options=opts)
     return driver
